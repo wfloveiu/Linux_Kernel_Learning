@@ -1,0 +1,28 @@
+
+menu "hybrid memory"
+
+# page hotnesss
+config PAGE_HOTNESS
+	bool "Enable PAGE_HOTNESS for Tiered Memory System"
+    depends on PAGE_EXTENSION
+
+config PAGE_HOTNESS_DEBUG
+	bool "Enable PAGE_HOTNESS_DEBUG for Tiered Memory System"
+    depends on PAGE_EXTENSION
+
+config PAGE_CHANGE_PROT
+	bool "Enable PAGE_CHANGE_PROT for Tiered Memory System"
+    def_bool y
+
+config PAGE_CHANGE_PROT_DEBUG
+	bool "Enable PAGE_CHANGE_PROT_DEBUG for Tiered Memory System"
+    def_bool y
+
+# numa predict
+config NUMA_PREDICT
+	bool "Enable Predict for Tiered Memory System"
+
+config NUMA_PREDICT_DEBUG
+	bool "Enable Predict Debug for Tiered Memory System"
+
+endmenu
