@@ -23,6 +23,24 @@
 #include <linux/local_lock.h>
 #include <asm/page.h>
 
+#include <linux/page_hotness.h>
+
+#ifdef CONFIG_PAGE_HOTNESS
+struct pglist_hotness_area {
+	struct page_hotness_data page_hotness_data; // each data contain a top N list of struct page_info
+	struct page_hotness_op	*page_hotness_op; // Counter Page list, 即page info 链表, list<struct page_info>
+};
+#endif
+
+#ifdef CONFIG_NUMA_PREDICT
+struct dup_info {
+	struct list_head list;
+	struct page* old_page;
+	struct page* dup_page;
+	unsigned long crc;
+};
+#endif
+
 /* Free memory management - zoned buddy allocator.  */
 #ifndef CONFIG_FORCE_MAX_ZONEORDER
 #define MAX_ORDER 11
@@ -882,6 +900,26 @@ typedef struct pglist_data {
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	struct deferred_split deferred_split_queue;
+#endif
+
+
+#ifdef CONFIG_NUMA_PREDICT
+    wait_queue_head_t kpredictd_wait;
+	struct task_struct *kpredictd;
+	int pm_node;
+	struct list_head dupinfo_list;
+	struct list_head duppage_list;
+	spinlock_t duplist_lock;
+	struct list_head migrate_list;
+	spinlock_t migrate_info_lock;
+	unsigned int nr_migrate_success;
+	unsigned int nr_dup_success;
+	unsigned int nr_migrate_fail;
+	unsigned int nr_dup_fail;
+#endif
+
+#ifdef CONFIG_PAGE_HOTNESS
+	struct pglist_hotness_area pglist_hotness_area;
 #endif
 
 	/* Fields commonly accessed by the page reclaim scanner */
