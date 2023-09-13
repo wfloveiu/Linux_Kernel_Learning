@@ -81,6 +81,14 @@
 #define IF_HAVE_PG_IDLE(flag,string)
 #endif
 
+#ifdef CONFIG_NUMA_PREDICT
+#define IF_HAVE_PG_PROMOTE(flag,string) ,{1UL << flag, string}
+#define IF_HAVE_PG_PREDICT(flag,string) ,{1UL << flag, string}
+#else
+#define IF_HAVE_PG_PROMOTE(flag,string)
+#define IF_HAVE_PG_PREDICT(flag,string)
+#endif
+
 #ifdef CONFIG_64BIT
 #define IF_HAVE_PG_ARCH_2(flag,string) ,{1UL << flag, string}
 #else
@@ -121,7 +129,10 @@ IF_HAVE_PG_HWPOISON(PG_hwpoison,	"hwpoison"	)		\
 IF_HAVE_PG_IDLE(PG_young,		"young"		)		\
 IF_HAVE_PG_IDLE(PG_idle,		"idle"		)		\
 IF_HAVE_PG_ARCH_2(PG_arch_2,		"arch_2"	)		\
-IF_HAVE_PG_SKIP_KASAN_POISON(PG_skip_kasan_poison, "skip_kasan_poison")
+IF_HAVE_PG_SKIP_KASAN_POISON(PG_skip_kasan_poison, "skip_kasan_poison")\
+IF_HAVE_PG_PROMOTE(PG_promote,          "promote"       )               \
+IF_HAVE_PG_PREDICT(PG_predict,          "predict"       )		\
+IF_HAVE_PG_PREDICT(PG_duplicate,          "duplicate"       )
 
 #define show_page_flags(flags)						\
 	(flags) ? __print_flags(flags, "|",				\

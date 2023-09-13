@@ -21,6 +21,7 @@
  *  Copyright (C) 2007 Red Hat, Inc., Peter Zijlstra
  */
 #include "sched.h"
+#include <linux/page_change_prot.h>
 
 /*
  * Targeted preemption latency for CPU-bound tasks:
@@ -2792,6 +2793,19 @@ static void task_numa_work(struct callback_head *work)
 		start = 0;
 		vma = mm->mmap;
 	}
+
+// lmy
+#ifdef CONFIG_PAGE_HOTNESS
+	// dump_topN();
+#endif
+	// dupinfo_list
+#if defined(CONFIG_PAGE_HOTNESS) && defined(CONFIG_NUMA_PREDICT)
+	// 由kpredictd来调用这个函数
+	// update_predict_queue();
+#endif
+#ifdef CONFIG_PAGE_CHANGE_PROT
+	// change_active_list_prot();
+#endif
 	for (; vma; vma = vma->vm_next) {
 		if (!vma_migratable(vma) || !vma_policy_mof(vma) ||
 			is_vm_hugetlb_page(vma) || (vma->vm_flags & VM_MIXEDMAP)) {

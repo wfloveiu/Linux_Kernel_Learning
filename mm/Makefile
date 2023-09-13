@@ -130,3 +130,16 @@ obj-$(CONFIG_PAGE_REPORTING) += page_reporting.o
 obj-$(CONFIG_IO_MAPPING) += io-mapping.o
 obj-$(CONFIG_HAVE_BOOTMEM_INFO_NODE) += bootmem_info.o
 obj-$(CONFIG_GENERIC_IOREMAP) += ioremap.o
+
+
+obj-$(CONFIG_PAGE_HOTNESS) += page_balancing.o
+obj-$(CONFIG_PAGE_HOTNESS) += page_hotness.o
+obj-$(CONFIG_PAGE_HOTNESS) += page_hotness_api.o
+obj-$(CONFIG_PAGE_CHANGE_PROT) += page_change_prot.o
+
+obj-$(CONFIG_NUMA_PREDICT) += page_migrate_info.o
+obj-$(CONFIG_NUMA_PREDICT) += page_dup_info.o
+obj-$(CONFIG_NUMA_PREDICT) += page_predict_migrate.o
+obj-$(CONFIG_NUMA_PREDICT) += page_predict_dup.o
+obj-$(CONFIG_NUMA_PREDICT) += page_predict.o
+

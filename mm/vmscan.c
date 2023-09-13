@@ -2213,6 +2213,11 @@ shrink_inactive_list(unsigned long nr_to_scan, struct lruvec *lruvec,
 	if (nr_taken == 0)
 		return 0;
 
+#ifdef CONFIG_NUMA_PREDICT
+	if (pgdat->pm_node == 0) {
+		nr_reclaimed = demote_page_list(&page_list, pgdat);
+	}
+#endif
 	nr_reclaimed = shrink_page_list(&page_list, pgdat, sc, &stat, false);
 
 	spin_lock_irq(&lruvec->lru_lock);
@@ -2286,6 +2291,12 @@ static void shrink_active_list(unsigned long nr_to_scan,
 	LIST_HEAD(l_hold);	/* The pages which were snipped off */
 	LIST_HEAD(l_active);
 	LIST_HEAD(l_inactive);
+#ifdef CONFIG_NUMA_PREDICT
+	unsigned long nr_promote;
+	unsigned int nr_migrated;
+	unsigned long active_to_promote = 0;
+	LIST_HEAD(l_promote);
+#endif
 	struct page *page;
 	unsigned nr_deactivate, nr_activate;
 	unsigned nr_rotated = 0;

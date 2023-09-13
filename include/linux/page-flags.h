@@ -141,6 +141,11 @@ enum pageflags {
 #ifdef CONFIG_KASAN_HW_TAGS
 	PG_skip_kasan_poison,
 #endif
+#ifdef CONFIG_NUMA_PREDICT
+	PG_duplicate,
+	PG_promote,
+	PG_predict,
+#endif
 	__NR_PAGEFLAGS,
 
 	/* Filesystems */
@@ -371,7 +376,14 @@ PAGEFLAG(Reserved, reserved, PF_NO_COMPOUND)
 PAGEFLAG(SwapBacked, swapbacked, PF_NO_TAIL)
 	__CLEARPAGEFLAG(SwapBacked, swapbacked, PF_NO_TAIL)
 	__SETPAGEFLAG(SwapBacked, swapbacked, PF_NO_TAIL)
-
+#ifdef CONFIG_NUMA_PREDICT
+	PAGEFLAG(Duplicate, duplicate, PF_HEAD) __CLEARPAGEFLAG(Duplicate, duplicate, PF_HEAD)
+		TESTCLEARFLAG(Duplicate, duplicate, PF_HEAD)
+	PAGEFLAG(Promote, promote, PF_HEAD) __CLEARPAGEFLAG(Promote, promote, PF_HEAD)
+		TESTCLEARFLAG(Promote, promote, PF_HEAD)
+	PAGEFLAG(Predict, predict, PF_HEAD) __CLEARPAGEFLAG(Predict, predict, PF_HEAD)
+		TESTCLEARFLAG(Predict, predict, PF_HEAD)
+#endif
 /*
  * Private page markings that may be used by the filesystem that owns the page
  * for its own purposes.

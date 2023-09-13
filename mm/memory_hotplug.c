@@ -42,6 +42,9 @@
 #include "internal.h"
 #include "shuffle.h"
 
+#ifdef CONFIG_NUMA_PREDICT
+#include <linux/page_predict.h>
+#endif
 
 /*
  * memory_hotplug.memmap_on_memory parameter
@@ -1147,6 +1150,9 @@ int __ref online_pages(unsigned long pfn, unsigned long nr_pages,
 
 	kswapd_run(nid);
 	kcompactd_run(nid);
+#ifdef CONFIG_NUMA_PREDICT
+	kpredictd_run(nid);
+#endif
 
 	writeback_set_ratelimit();
 

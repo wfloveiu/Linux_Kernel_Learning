@@ -7473,8 +7473,23 @@ static void __meminit pgdat_init_internals(struct pglist_data *pgdat)
 	init_waitqueue_head(&pgdat->kswapd_wait);
 	init_waitqueue_head(&pgdat->pfmemalloc_wait);
 
+#ifdef CONFIG_NUMA_PREDICT
+	init_waitqueue_head(&pgdat->kpredictd_wait);
+	spin_lock_init(&pgdat->duplist_lock);
+	INIT_LIST_HEAD(&pgdat->dupinfo_list);
+	INIT_LIST_HEAD(&pgdat->duppage_list);
+    pgdat->nr_migrate_success = 0;
+    pgdat->nr_dup_success = 0;
+    pgdat->nr_migrate_fail = 0;
+    pgdat->nr_dup_fail = 0;
+#endif
+
 	pgdat_page_ext_init(pgdat);
 	lruvec_init(&pgdat->__lruvec);
+
+#ifdef CONFIG_PAGE_HOTNESS
+	hotness_init(pgdat);
+#endif
 }
 
 static void __meminit zone_init_internals(struct zone *zone, enum zone_type idx, int nid,

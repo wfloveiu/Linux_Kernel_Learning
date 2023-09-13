@@ -23,6 +23,10 @@ enum page_ext_flags {
 	PAGE_EXT_YOUNG,
 	PAGE_EXT_IDLE,
 #endif
+#if defined CONFIG_PAGE_HOTNESS
+	PAGE_EXT_TRACKED, // lmy
+	PAGE_EXT_MIGRATING, // already in migration info list
+#endif
 };
 
 /*

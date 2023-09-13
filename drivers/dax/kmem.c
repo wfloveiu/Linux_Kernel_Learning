@@ -145,6 +145,10 @@ static int dev_dax_kmem_probe(struct dev_dax *dev_dax)
 		mapped++;
 	}
 
+#ifdef CONFIG_NUMA_PREDICT
+	set_pmem_node(numa_node);
+#endif
+
 	dev_set_drvdata(dev, data);
 
 	return 0;

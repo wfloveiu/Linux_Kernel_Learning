@@ -3310,4 +3310,65 @@ static int __init migrate_on_reclaim_init(void)
 	return 0;
 }
 late_initcall(migrate_on_reclaim_init);
+
+
+#ifdef CONFIG_NUMA_PREDICT
+int migrate_page_mapping(struct address_space *mapping, struct page *newpage,
+			 struct page *page, enum migrate_mode mode)
+{
+	return migrate_page_move_mapping(mapping, newpage, page, mode);
+}
+
+int migrate_file_page_mapping(struct address_space *mapping,
+			      struct page *newpage, struct page *page,
+			      enum migrate_mode mode)
+{
+	if (PageDirty(page)) {
+		/* Only writeback pages in full synchronous migration */
+		switch (mode) {
+		case MIGRATE_SYNC:
+		case MIGRATE_SYNC_NO_COPY:
+			break;
+		default:
+			return -EBUSY;
+		}
+		return writeout(mapping, page);
+	}
+
+	/*
+	 * Buffers may be managed in a filesystem specific way.
+	 * We must have no buffers or drop them.
+	 */
+	if (page_has_private(page) && !try_to_release_page(page, GFP_KERNEL))
+		return mode == MIGRATE_SYNC ? -EAGAIN : -EBUSY;
+
+	return migrate_page_move_mapping(mapping, newpage, page, mode);
+}
+
+inline bool my_remove_migration_pte(struct page *page, struct vm_area_struct *vma,
+				 unsigned long addr, void *old)
+{
+	return remove_migration_pte(page, vma, addr, old);
+}
+
+
+struct page *alloc_migration_page(struct page *page, unsigned long node)
+{
+	struct migration_target_control mtc = {
+		/*
+		 * Allocate from 'node', or fail quickly and quietly.
+		 * When this happens, 'page' will likely just be discarded
+		 * instead of migrated.
+		 */
+		.gfp_mask = (GFP_HIGHUSER_MOVABLE & ~__GFP_RECLAIM) |
+			    __GFP_THISNODE | __GFP_NOWARN | __GFP_NOMEMALLOC |
+			    GFP_NOWAIT,
+		.nid = node
+	};
+
+	return alloc_migration_target(page, (unsigned long)&mtc);
+}
+#endif /* CONFIG_NUMA_PREDICT */
+
+
 #endif /* CONFIG_HOTPLUG_CPU */

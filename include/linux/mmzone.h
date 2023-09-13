@@ -32,15 +32,6 @@ struct pglist_hotness_area {
 };
 #endif
 
-#ifdef CONFIG_NUMA_PREDICT
-struct dup_info {
-	struct list_head list;
-	struct page* old_page;
-	struct page* dup_page;
-	unsigned long crc;
-};
-#endif
-
 /* Free memory management - zoned buddy allocator.  */
 #ifndef CONFIG_FORCE_MAX_ZONEORDER
 #define MAX_ORDER 11
@@ -278,25 +269,50 @@ static __always_inline bool vmstat_item_in_bytes(int idx)
  * above and the descriptions in vmstat_text in mm/vmstat.c
  */
 #define LRU_BASE 0
+
+#ifdef CONFIG_NUMA_PREDICT
+//#define LRU_PROMOTE 2
+//#define LRU_PREDICT 3
+//#define LRU_FILE 4
+#define LRU_FILE 1
+#define LRU_ACTIVE 2
+#define LRU_PREDICT 4
+
+#else
 #define LRU_ACTIVE 1
 #define LRU_FILE 2
+#endif
 
 enum lru_list {
 	LRU_INACTIVE_ANON = LRU_BASE,
-	LRU_ACTIVE_ANON = LRU_BASE + LRU_ACTIVE,
 	LRU_INACTIVE_FILE = LRU_BASE + LRU_FILE,
+	LRU_ACTIVE_ANON = LRU_BASE + LRU_ACTIVE,
 	LRU_ACTIVE_FILE = LRU_BASE + LRU_FILE + LRU_ACTIVE,
+#ifdef CONFIG_NUMA_PREDICT
+	//LRU_PROMOTE_FILE = LRU_BASE + LRU_FILE + LRU_PROMOTE,
+	LRU_PREDICT_ANON = LRU_BASE + LRU_PREDICT,
+	LRU_PREDICT_FILE = LRU_BASE + LRU_FILE + LRU_PREDICT,
+#endif
 	LRU_UNEVICTABLE,
 	NR_LRU_LISTS
 };
 
 #define for_each_lru(lru) for (lru = 0; lru < NR_LRU_LISTS; lru++)
 
-#define for_each_evictable_lru(lru) for (lru = 0; lru <= LRU_ACTIVE_FILE; lru++)
+// todo:若使用Promote队列
+#ifdef CONFIG_NUMA_PREDICT
+	#define for_each_evictable_lru(lru) for (lru = 0; lru <= LRU_PREDICT_FILE; lru++)
+#else
+	#define for_each_evictable_lru(lru) for (lru = 0; lru <= LRU_ACTIVE_FILE; lru++)
+#endif
 
 static inline bool is_file_lru(enum lru_list lru)
 {
+#ifdef CONFIG_NUMA_PREDICT
+	return (lru == LRU_INACTIVE_FILE || lru == LRU_ACTIVE_FILE || lru == LRU_PREDICT_FILE);
+#else
 	return (lru == LRU_INACTIVE_FILE || lru == LRU_ACTIVE_FILE);
+#endif
 }
 
 static inline bool is_active_lru(enum lru_list lru)
@@ -861,6 +877,20 @@ typedef struct pglist_data {
 	wait_queue_head_t pfmemalloc_wait;
 	struct task_struct *kswapd;	/* Protected by
 					   mem_hotplug_begin/end() */
+#ifdef CONFIG_NUMA_PREDICT
+    wait_queue_head_t kpredictd_wait;
+	struct task_struct *kpredictd;
+	int pm_node;
+	struct list_head dupinfo_list;
+	struct list_head duppage_list;
+	spinlock_t duplist_lock;
+	struct list_head migrate_list;
+	spinlock_t migrate_info_lock;
+	unsigned int nr_migrate_success;
+	unsigned int nr_dup_success;
+	unsigned int nr_migrate_fail;
+	unsigned int nr_dup_fail;
+#endif
 	int kswapd_order;
 	enum zone_type kswapd_highest_zoneidx;
 
@@ -900,22 +930,6 @@ typedef struct pglist_data {
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	struct deferred_split deferred_split_queue;
-#endif
-
-
-#ifdef CONFIG_NUMA_PREDICT
-    wait_queue_head_t kpredictd_wait;
-	struct task_struct *kpredictd;
-	int pm_node;
-	struct list_head dupinfo_list;
-	struct list_head duppage_list;
-	spinlock_t duplist_lock;
-	struct list_head migrate_list;
-	spinlock_t migrate_info_lock;
-	unsigned int nr_migrate_success;
-	unsigned int nr_dup_success;
-	unsigned int nr_migrate_fail;
-	unsigned int nr_dup_fail;
 #endif
 
 #ifdef CONFIG_PAGE_HOTNESS

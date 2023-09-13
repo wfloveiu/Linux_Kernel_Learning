@@ -27,6 +27,10 @@ const char *migrate_reason_names[MR_TYPES] = {
 	"contig_range",
 	"longterm_pin",
 	"demotion",
+#ifdef CONFIG_NUMA_PREDICT
+	"promotion",
+	"pridiction",
+#endif
 };
 
 const struct trace_print_flags pageflag_names[] = {

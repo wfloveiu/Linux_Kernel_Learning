@@ -73,9 +73,15 @@ static __always_inline enum lru_list page_lru(struct page *page)
 		return LRU_UNEVICTABLE;
 
 	lru = page_is_file_lru(page) ? LRU_INACTIVE_FILE : LRU_INACTIVE_ANON;
+#ifdef CONFIG_NUMA_PREDICT
+	if (PagePredict(page))
+		lru += LRU_PREDICT;
+	else if (PageActive(page))
+		lru += LRU_ACTIVE;
+#else
 	if (PageActive(page))
 		lru += LRU_ACTIVE;
-
+#endif
 	return lru;
 }
 

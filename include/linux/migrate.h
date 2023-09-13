@@ -34,6 +34,10 @@ enum migrate_reason {
 	MR_CONTIG_RANGE,
 	MR_LONGTERM_PIN,
 	MR_DEMOTION,
+#ifdef CONFIG_NUMA_PREDICT
+    MR_PROMOTION,
+	MR_PREDICTION,
+#endif
 	MR_TYPES
 };
 

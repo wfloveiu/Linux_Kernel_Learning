@@ -80,6 +80,8 @@
 
 #include "internal.h"
 
+#include <linux/page_predict.h>
+
 static struct kmem_cache *anon_vma_cachep;
 static struct kmem_cache *anon_vma_chain_cachep;
 
@@ -460,6 +462,9 @@ void __init anon_vma_init(void)
 			anon_vma_ctor);
 	anon_vma_chain_cachep = KMEM_CACHE(anon_vma_chain,
 			SLAB_PANIC|SLAB_ACCOUNT);
+#ifdef CONFIG_NUMA_PREDICT
+	dup_info_cache_init();
+#endif
 }
 
 /*

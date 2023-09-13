@@ -35,6 +35,8 @@
 
 #include "internal.h"
 
+#include <linux/page_balancing.h>
+
 static unsigned long change_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 		unsigned long addr, unsigned long end, pgprot_t newprot,
 		unsigned long cp_flags)
@@ -85,8 +87,6 @@ static unsigned long change_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 				struct page *page;
 
 				/* Avoid TLB flush if possible */
-				if (pte_protnone(oldpte))
-					continue;
 
 				page = vm_normal_page(vma, addr, oldpte);
 				if (!page || PageKsm(page))
@@ -104,6 +104,21 @@ static unsigned long change_pte_range(struct vm_area_struct *vma, pmd_t *pmd,
 				 */
 				if (page_is_file_lru(page) && PageDirty(page))
 					continue;
+
+					
+#ifdef CONFIG_PAGE_HOTNESS
+				int cpu_id = task_cpu(current);
+				BUG_ON(!page);
+//				BUG_ON(PageUnevictable(page));
+				if (pte_protnone(oldpte)) {
+					int hotness_counter = mod_page_access_counter(page, 0, cpu_id);
+					add_page_for_tracking(page, 0, cpu_id);
+					continue;
+				} else {
+					int hotness_counter = mod_page_access_counter(page, 1, cpu_id);
+					add_page_for_tracking(page, 1, cpu_id);
+				}
+#endif
 
 				/*
 				 * Don't mess with PTEs if page is already on the node

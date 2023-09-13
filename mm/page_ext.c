@@ -75,6 +75,9 @@ static struct page_ext_operations *page_ext_ops[] = {
 #if defined(CONFIG_PAGE_IDLE_FLAG) && !defined(CONFIG_64BIT)
 	&page_idle_ops,
 #endif
+#ifdef CONFIG_PAGE_HOTNESS
+	&page_info_ops,
+#endif
 };
 
 unsigned long page_ext_size = sizeof(struct page_ext);

@@ -98,6 +98,8 @@ struct page *mem_map;
 EXPORT_SYMBOL(mem_map);
 #endif
 
+#include <linux/page_predict.h>
+
 /*
  * A number of key systems in x86 including ioremap() rely on the assumption
  * that high_memory defines the upper bound on direct map memory, then end
@@ -4374,6 +4376,42 @@ int numa_migrate_prep(struct page *page, struct vm_area_struct *vma,
 	return mpol_misplaced(page, vma, addr);
 }
 
+
+// lmy
+// unused
+#ifdef CONFIG_PAGE_HOTNESS
+enum hotness_pte_status {
+	Default = 0, // unused
+	Same = 1,
+	Diff = 2,
+};
+
+// pte_status是为了区分TNF_MIGRATE_FAIL后的两种情况，虽然目前我也不知道这两种情况应该如何处理
+static void update_tracked_page_hotness(struct page* page, int target_nid, int flags,
+	enum hotness_pte_status pte_status)
+{
+	// 获取当前进程或线程所在的cpu
+	int cpu_id;
+	
+	BUG_ON(!page);
+	cpu_id = task_cpu(current);
+	page_hotness_stat.all_in_hint_page_fault ++;
+
+	// debug用
+	// add_page_for_tracking(page, 1, cpu_id);
+
+	if (flags & NUMA_NO_NODE) {
+		;
+	} else if (flags & TNF_MIGRATED) {
+		page_hotness_stat.migrate_in_hint_page_fault ++;
+	} else if (flags & TNF_MIGRATE_FAIL) {
+		add_page_for_tracking(page, 1, cpu_id);
+	} else {
+		add_page_for_tracking(page, 1, cpu_id);
+	}
+}
+#endif
+
 static vm_fault_t do_numa_page(struct vm_fault *vmf)
 {
 	struct vm_area_struct *vma = vmf->vma;
@@ -4405,6 +4443,15 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	if (!page)
 		goto out_map;
 
+#ifdef CONFIG_NUMA_PREDICT
+	if (PageDuplicate(page)) {
+        pte_unmap_unlock(vmf->pte, vmf->ptl);
+        handle_dup_page_fault(page, vma, vmf);
+
+		goto out_map;
+	}
+#endif
+
 	/* TODO: handle PTE-mapped THP */
 	if (PageCompound(page))
 		goto out_map;
@@ -4432,23 +4479,36 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	target_nid = numa_migrate_prep(page, vma, vmf->address, page_nid,
 			&flags);
 	if (target_nid == NUMA_NO_NODE) {
+		#ifdef CONFIG_PAGE_HOTNESS
+			update_tracked_page_hotness(page, target_nid, flags, Default);
+		#endif
 		put_page(page);
 		goto out_map;
 	}
+	// todo:此处获取了锁，所以后面不能重新获取
 	pte_unmap_unlock(vmf->pte, vmf->ptl);
 
 	/* Migrate to the requested node */
 	if (migrate_misplaced_page(page, vma, target_nid)) {
 		page_nid = target_nid;
 		flags |= TNF_MIGRATED;
+#ifdef CONFIG_PAGE_HOTNESS
+		update_tracked_page_hotness(page, target_nid, flags, Default);
+#endif
 	} else {
 		flags |= TNF_MIGRATE_FAIL;
 		vmf->pte = pte_offset_map(vmf->pmd, vmf->address);
 		spin_lock(vmf->ptl);
 		if (unlikely(!pte_same(*vmf->pte, vmf->orig_pte))) {
 			pte_unmap_unlock(vmf->pte, vmf->ptl);
+#ifdef CONFIG_PAGE_HOTNESS
+			update_tracked_page_hotness(page, target_nid, flags, Diff);
+#endif
 			goto out;
 		}
+#ifdef CONFIG_PAGE_HOTNESS
+		update_tracked_page_hotness(page, target_nid, flags, Same);
+#endif
 		goto out_map;
 	}
 
