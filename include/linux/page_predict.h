@@ -59,7 +59,7 @@ extern int add_page_to_dup_list(struct page *page, int lock);
 extern int predict_pages_by_dup(struct list_head *from,
                           int target_nid, enum migrate_mode mode,
                           enum migrate_reason reason);
-extern bool handle_dup_page_fault(struct page *page, struct vm_area_struct *vma, struct vm_fault *vmf);
+extern int handle_dup_page_fault(struct page *page, struct vm_area_struct *vma, struct vm_fault *vmf);
 
 
 extern struct page *alloc_migration_page(struct page *page, unsigned long node);

@@ -7,7 +7,7 @@
 #include <linux/stackdepot.h>
 #include <linux/page_balancing.h>
 
-#define PAGE_HOTNESS_MAX_NUM 100
+#define PAGE_HOTNESS_MAX_NUM 10
 
 // data
 struct pglist_data;

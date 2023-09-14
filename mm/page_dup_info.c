@@ -26,6 +26,14 @@ struct dup_info *dup_info_alloc(gfp_t gfp)
 	return info;
 }
 
+static void crc_init_in_numa_dup(struct dup_info *dup)
+{
+    struct page *page = dup->old_page;
+    void *addr;
+    addr = page_address(page);
+    dup->crc = *(unsigned long *)addr;
+}
+
 // set_numa_duplication_info
 struct dup_info *init_dup_info(struct page *old_page, struct page *new_page)
 {
@@ -34,7 +42,7 @@ struct dup_info *init_dup_info(struct page *old_page, struct page *new_page)
     
     di->old_page = old_page;
     di->dup_page = new_page;
-
+    crc_init_in_numa_dup(di);
     return di;
 }
 
