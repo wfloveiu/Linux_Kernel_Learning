@@ -218,7 +218,6 @@ void reset_page_access_counter(struct page *page)
 {
 	struct page_ext *page_ext;
 	struct page_info *pi;
-    printk(KERN_ALERT "reset_page_access_counter\n");
 	page_ext = lookup_page_ext(page);
 	pi = get_page_info(page_ext);
 

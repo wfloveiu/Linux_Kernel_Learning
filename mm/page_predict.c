@@ -153,7 +153,7 @@ static int kpredictd(void *p)
         INIT_LIST_HEAD(&pgdat->migrate_list);
         BUG_ON(!list_empty(&pgdat->migrate_list));
 
-		if (round > 3){
+		if (round > 7){
             if (del_miss_dup_info(pgdat) < 0){
 //                printk(KERN_ALERT "del miss dup info failed\n");
                 goto sleep;
@@ -175,6 +175,7 @@ static int kpredictd(void *p)
 		// 将migrate_info_list中的page迁移到对应的node中
         if(have_info) {
             predict_pages(&migrate_info_list, pgdat);
+            round++;
         }
 #ifdef PAGE_MIGRATE_COUNT
         print_migrate_count(pgdat);
@@ -183,7 +184,6 @@ sleep:
 		if (kthread_should_stop())
 			break;
 		kpredictd_try_to_sleep(pgdat);
-        round++;
 	}
 
 	tsk->flags &= ~(PF_MEMALLOC | PF_SWAPWRITE | PF_KSWAPD);

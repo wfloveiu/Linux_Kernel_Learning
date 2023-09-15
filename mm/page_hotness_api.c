@@ -137,7 +137,7 @@ void page_hotness_migrate_success(struct page *old_page)
     spin_lock_irq(page_hotness_lock);
 
     // del pi from TopN list
-    printk(KERN_ALERT "page_hotness_migrate_success,list_del(&pi->page_list);");
+//    printk(KERN_ALERT "page_hotness_migrate_success,list_del(&pi->page_list);");
 //    list_for_each_entry(page_info1,&data->hotness_head,page_list){
 //        printk(KERN_ALERT "page_info:%px,prev:%px,next:%px",page_info1,page_info1->page_list.prev,page_info1->page_list.next);
 //    }
@@ -162,8 +162,8 @@ void page_hotness_migrate_success(struct page *old_page)
 //    pi->page_list.next = LIST_POISON1;
 //    pi->page_list.prev = LIST_POISON2;
 //    printk(KERN_ALERT "LIST_POISON");
-    data->size --;
-    printk(KERN_ALERT "list_del(&pi->page_list) end in node %d",pgdat->node_id);
+    (data->size) --;
+//    printk(KERN_ALERT "list_del(&pi->page_list) end in node %d",pgdat->node_id);
 
     // clear migrating flag
     BUG_ON(!test_bit(PAGE_EXT_MIGRATING, &page_ext->flags));

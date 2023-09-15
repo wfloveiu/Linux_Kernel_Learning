@@ -35,11 +35,11 @@ static bool crc_check_in_numa_dup(struct dup_info *dup)
 // set_numa_dup_pte_pgf
 static bool do_unmap_dup_page(struct page *page,
 				       struct vm_area_struct *vma,
-				       unsigned long address, void *old)
+				       unsigned long address, void *target_nid)
 {
     struct mm_struct *mm = vma->vm_mm;
     pgprot_t newprot = PAGE_NONE;
-	pte_t *pte, pteval, new_pte;
+	pte_t *pte, oldpte, newpte;
     struct page *subpage;
 	unsigned long nr_pte_updates = 0;
     bool ret = true;
@@ -82,12 +82,13 @@ static bool do_unmap_dup_page(struct page *page,
     if (!vma_is_accessible(vma))
         goto out;
 
-
-    printk(KERN_ALERT "cpu:%d, cpu node:%u, page node:%u", vma->vm_mm->owner->recent_used_cpu,
-           cpu_to_node(vma->vm_mm->owner->recent_used_cpu), page_to_nid(old));
+//    printk(KERN_ALERT "recent_used_cpu:%d, cpu:%d, on_cpu:%d", vma->vm_mm->owner->recent_used_cpu,
+//           vma->vm_mm->owner->cpu, vma->vm_mm->owner->on_cpu);
+//    printk(KERN_ALERT "cpu:%d, cpu node:%u, page node:%u, target_nid:%d", vma->vm_mm->owner->recent_used_cpu,
+//           cpu_to_node(vma->vm_mm->owner->cpu), page_to_nid(page), *(int *) target_nid);
     while (page_vma_mapped_walk(&pvmw)) {
-        if (cpu_to_node(vma->vm_mm->owner->recent_used_cpu) != page_to_nid(old)) {
-            printk(KERN_ALERT "try to unmap one page");
+        if (cpu_to_node(vma->vm_mm->owner->cpu) == *(int *)target_nid) {
+//            printk(KERN_ALERT "try to unmap one page");
 
             VM_BUG_ON_PAGE(!pvmw.pte, page);
             subpage = page - page_to_pfn(page) + pte_pfn(*pvmw.pte);
@@ -95,16 +96,16 @@ static bool do_unmap_dup_page(struct page *page,
 
             /* Nuke the page table entry. */
             flush_cache_page(vma, address, pte_pfn(*pvmw.pte));
-            pteval = ptep_clear_flush(vma, address, pvmw.pte);
-//            pte = pte_offset_map(pvmw.pmd, address);
-//            pteval = *pte;
+//            pteval = ptep_clear_flush(vma, address, pvmw.pte);
+            pte = pvmw.pte;
+            oldpte = *pte;
 
-            if (pte_dirty(pteval))
+            if (pte_dirty(oldpte))
                 set_page_dirty(page);
 
             /* Update high watermark before we lower rss */
             update_hiwater_rss(mm);
-            if (pte_unused(pteval) && !userfaultfd_armed(vma)) {
+            if (pte_unused(oldpte) && !userfaultfd_armed(vma)) {
                 dec_mm_counter(mm, mm_counter(page));
                 /* We have to invalidate as we cleared the pte */
                 mmu_notifier_invalidate_range(mm, address,
@@ -117,13 +118,13 @@ static bool do_unmap_dup_page(struct page *page,
 //                    page_vma_mapped_walk_done(&pvmw);
 //                    break;
 //                }
-
-                new_pte = pte_modify(pteval, newprot);
-                if (pte_write(pteval)) {
-                    new_pte = pte_mkwrite(new_pte);
+                oldpte = ptep_modify_prot_start(vma, address, pte);
+                newpte = pte_modify(oldpte, newprot);
+                if (pte_write(oldpte)) {
+                    newpte = pte_mkwrite(newpte);
                 }
-
-                set_pte_at(mm, address, pvmw.pte, new_pte);
+                ptep_modify_prot_commit(vma, address, pte, oldpte, newpte);
+//                set_pte_at(mm, address, pvmw.pte, newpte);
             }
         }
         update_mmu_cache(vma, pvmw.address, pvmw.pte);
@@ -137,19 +138,18 @@ out:
 
 // 对应remove_migration_ptes()，但是功能修改为将其他node上的map修改为numa pgf的状态
 // set_page_numa_dup_rmap
-void unmap_dup_page(struct page *old_page, struct page *new_page,
-				    bool locked)
+void unmap_dup_page(struct page *page, bool locked,  int target_nid)
 {
 
 	struct rmap_walk_control rwc = {
 		.rmap_one = do_unmap_dup_page,
-		.arg = old_page,
+		.arg = &target_nid,
 	};
 
 	if (locked)
-		rmap_walk_locked(old_page, &rwc);
+		rmap_walk_locked(page, &rwc);
 	else
-		rmap_walk(old_page, &rwc);
+		rmap_walk(page, &rwc);
 }
 
 // 将page的内容和状态复制到新页
@@ -168,10 +168,11 @@ static void copy_dup_page(struct page *newpage,
 // 对应__unmap_and_move()，再加上在node中添加副本元数据
 // do_page_numa_duplication
 static int do_dup_one_page(struct page *old_page, struct page *new_page,
-				    int force, enum migrate_mode mode)
+				    int force, enum migrate_mode mode, int target_nid)
 {
 
 	int rc = MIGRATEPAGE_SUCCESS;
+    int step_ret=0;
 	bool page_was_mapped = false;
     struct dup_info *di = NULL;
 	struct anon_vma *anon_vma = NULL;
@@ -231,10 +232,18 @@ static int do_dup_one_page(struct page *old_page, struct page *new_page,
 		goto failed_init_dup_info;
 	}
 
+    step_ret = add_dup_info_to_dup_list(di, pgdat, 1);
+    if (!step_ret) {
+		printk(KERN_ALERT "can't add dup_info to dup list\n");
+		rc = -EAGAIN;
+		goto failed_add_dup_info;
+	}
+    step_ret = 0;
+
     // 将副本信息加到list中
 	// printk("add_page_to_dup_list\n");
-    int success = add_page_to_dup_list(old_page, 1);
-	if (!success) {
+    step_ret = add_page_to_dup_list(old_page, 1);
+	if (!step_ret) {
 		printk(KERN_ALERT "can't add old_page to dup list\n");
 		rc = -EAGAIN;
 		goto failed_add_dup_info;
@@ -245,7 +254,7 @@ static int do_dup_one_page(struct page *old_page, struct page *new_page,
     copy_dup_page(new_page, old_page, mode);
     // unmap远端进程的pte
     printk("unmap_dup_page\n");
-	unmap_dup_page(old_page, old_page, false);
+	unmap_dup_page(old_page, false, target_nid);
 	// printk("unmap_dup_page end\n");
     // 设置page flag
 	SetPageDuplicate(old_page);
@@ -306,7 +315,7 @@ int dup_one_page(struct page *page, int target_nid, int force,
 	if (!newpage)
 		return -ENOMEM;
 
-	rc = do_dup_one_page(page, newpage, force, mode);
+	rc = do_dup_one_page(page, newpage, force, mode, target_nid);
 //	printk(KERN_ALERT "----------------page dup finished,rc = %d--------------\n",rc);
 	if (rc != MIGRATEPAGE_SUCCESS) {
 		printk(KERN_ALERT "----------------page dup finished,failed, rc = %d--------------\n",rc);
@@ -504,10 +513,12 @@ static int do_handle_dup_page_fault(struct dup_info *di)
 	new_page = di->dup_page;
 
 	if (!trylock_page(old_page)) {
+        printk(KERN_ALERT "can't lock old page");
 		goto failed_lock_old_page;
 	}
 
 	if (!trylock_page(new_page)) {
+        printk(KERN_ALERT "can't lock new page");
 		goto failed_lock_new_page;
 	}
 
@@ -542,12 +553,7 @@ int handle_dup_page_fault(struct page *page, struct vm_area_struct *vma, struct 
 	struct dup_info *di = NULL, *next_di;
 	struct pglist_data *pgdat = page_pgdat(page);
     struct anon_vma *anon_vma = NULL;
-	printk(KERN_ALERT "handle_dup_page_fault start for page:%px",page);
-    // page lock
-    if (!trylock_page(page)) {
-        printk(KERN_ALERT "can't lock page:%px",page);
-		goto failed_lock_page;
-	}
+//	printk(KERN_ALERT "handle_dup_page_fault start for page:%px",page);
 
     if (PageAnon(page) && !PageKsm(page))
 		anon_vma = page_get_anon_vma(page);
@@ -579,7 +585,7 @@ int handle_dup_page_fault(struct page *page, struct vm_area_struct *vma, struct 
 	}
 
 	rc = do_handle_dup_page_fault(di);
-    printk(KERN_ALERT "do_handle_dup_page_fault end, rc = %d",rc);
+//    printk(KERN_ALERT "do_handle_dup_page_fault end, rc = %d",rc);
 	BUG_ON(!rc);
 	if (!rc) {
 		goto failed_handle_fault;
@@ -594,18 +600,16 @@ success:
     spin_unlock_irq(&pgdat->duplist_lock);
 	// printk("%s realease duplist_lock", __func__);
     page_hotness_migrate_success(page);
-    printk(KERN_ALERT "handle_dup_page_fault success");
+    printk(KERN_ALERT "handle_dup_page_fault success for page:%px",page);
 	return rc;
 
 failed_handle_fault:
-failed_lock_dup_page:
 crc_error:
 fail_find_dup_info:
     rc = -ENOLCK;
     if (anon_vma)
 		put_anon_vma(anon_vma);
 
-failed_lock_page:
     spin_unlock_irq(&pgdat->duplist_lock);
 	// printk("%s: release duplist_lock\n", __func__);
 

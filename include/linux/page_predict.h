@@ -54,6 +54,7 @@ extern struct dup_info *dup_info_alloc(gfp_t gfp);
 struct dup_info *init_dup_info(struct page *old_page, struct page *new_page);
 extern inline void dup_info_free(struct dup_info *dup_info);
 extern int add_page_to_dup_list(struct page *page, int lock);
+extern int add_dup_info_to_dup_list(struct dup_info *di, struct pglist_data *pgdat, int lock);
 
 // mm/page_predict_dup.c
 extern int predict_pages_by_dup(struct list_head *from,

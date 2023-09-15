@@ -76,6 +76,27 @@ int add_page_to_dup_list(struct page *page, int lock)
 	return 1;
 }
 
+int add_dup_info_to_dup_list(struct dup_info *di, struct pglist_data *pgdat, int lock)
+{
+	if (lock) {
+		spin_lock_irq(&pgdat->duplist_lock);
+		if (!spin_is_locked(&pgdat->duplist_lock)) {
+        	printk(KERN_ALERT "get duplist_lock failed\n");
+			dump_stack();
+			BUG_ON(1);
+        	return 0;
+		}
+	}
+
+	list_add(&di->list, &pgdat->dupinfo_list);
+
+	if (lock) {
+		spin_unlock_irq(&pgdat->duplist_lock);
+	}
+
+	return 1;
+}
+
 
 void dump_dup_info(struct dup_info *dup_info)
 {
