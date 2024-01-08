@@ -138,8 +138,10 @@ extern bool cgroup_memory_nokmem;
  * by a const pointer.
  */
 struct alloc_context {
+	// 运行进程 CPU 所在 NUMA 节点以及其所有备用 NUMA 节点中允许内存分配的内存区域
 	struct zonelist *zonelist;
 	nodemask_t *nodemask;
+	// 内存分配优先级最高的内存区域 zone
 	struct zoneref *preferred_zoneref;
 	int migratetype;
 
@@ -154,6 +156,7 @@ struct alloc_context {
 	 * usable for this allocation request.
 	 */
 	enum zone_type highest_zoneidx;
+	// 是否允许当前 NUMA 节点中的脏页均衡扩散迁移至其他 NUMA 节点
 	bool spread_dirty_pages;
 };
 

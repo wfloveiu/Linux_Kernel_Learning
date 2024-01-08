@@ -95,6 +95,7 @@
 #include <linux/minmax.h>
 #include <linux/numa.h>
 
+//  NUMA 节点多于一个，内核会维护一个位图 node_states
 typedef struct { DECLARE_BITMAP(bits, MAX_NUMNODES); } nodemask_t;
 extern nodemask_t _unused_nodemask_arg_;
 

@@ -458,8 +458,11 @@ int pagecache_write_end(struct file *, struct address_space *mapping,
  * @private_data: For use by the owner of the address_space.
  */
 struct address_space {
+	// 指向当前address_space 对象所属的文件的inode对象（每个文件都有一个inode）
 	struct inode		*host;
+	// i_pages 缓存的页面
 	struct xarray		i_pages;
+	// 在无效时保持页面缓存内容与文件偏移量到磁盘块映射在文件系统中的一致性
 	struct rw_semaphore	invalidate_lock;
 	gfp_t			gfp_mask;
 	atomic_t		i_mmap_writable;
@@ -468,9 +471,9 @@ struct address_space {
 	atomic_t		nr_thps;
 #endif
 	struct rb_root_cached	i_mmap;
-	struct rw_semaphore	i_mmap_rwsem;
-	unsigned long		nrpages;
-	pgoff_t			writeback_index;
+	struct rw_semaphore	i_mmap_rwsem; // 保护i_mmap 和 i_mmap_writable
+	unsigned long		nrpages;  // 页面条目数量
+	pgoff_t			writeback_index; // 写回开始位置
 	const struct address_space_operations *a_ops;
 	unsigned long		flags;
 	errseq_t		wb_err;

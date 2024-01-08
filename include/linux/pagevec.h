@@ -18,6 +18,7 @@ struct page;
 struct address_space;
 
 struct pagevec {
+	// 缓存数组pages的偏移
 	unsigned char nr;
 	bool percpu_pvec_drained;
 	struct page *pages[PAGEVEC_SIZE];

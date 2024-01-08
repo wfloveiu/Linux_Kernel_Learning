@@ -1122,18 +1122,29 @@ static inline void xa_release(struct xarray *xa, unsigned long index)
  * either a value entry or a sibling of a value entry.
  */
 struct xa_node {
+	/*
+	shift成员用于指定当前xa_node的slots数组中成员的单位，当shift为0时，说明当前xa_node的slots数组
+	中成员为叶子节点，当shift为6时，说明当前xa_node的slots数组中成员指向的xa_node可以最多包含2^6个节点
+	*/
 	unsigned char	shift;		/* Bits remaining in each slot */
+	// offset表示该子节点在父节点中的偏移
 	unsigned char	offset;		/* Slot offset in parent */
+	// count成员表示该xa_node有多少个slots已经被使用
 	unsigned char	count;		/* Total entry count */
 	unsigned char	nr_values;	/* Value entry count */
+	// 父节点指针
 	struct xa_node __rcu *parent;	/* NULL at top of tree */
+	// 所属的xarray指针
 	struct xarray	*array;		/* The array we belong to */
 	union {
 		struct list_head private_list;	/* For tree user */
 		struct rcu_head	rcu_head;	/* Used when freeing node */
 	};
+	// slot数组，存储子节点指针
 	void __rcu	*slots[XA_CHUNK_SIZE];
 	union {
+		// tags是二维数组，tags[0]数组是脏页标志位数组，当tags[0][i] = 1表示它的第i个子节点的所有叶子节点中至少有一个脏页时，置位
+		// tags[1]是写回标志位数组
 		unsigned long	tags[XA_MAX_MARKS][XA_MARK_LONGS];
 		unsigned long	marks[XA_MAX_MARKS][XA_MARK_LONGS];
 	};

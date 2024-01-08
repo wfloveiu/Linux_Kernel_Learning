@@ -4044,8 +4044,11 @@ get_page_from_freelist(gfp_t gfp_mask, unsigned int order, int alloc_flags,
 						const struct alloc_context *ac)
 {
 	struct zoneref *z;
+	// 当前遍历到的内存区域 zone 引用
 	struct zone *zone;
+	// 最近遍历的numa节点
 	struct pglist_data *last_pgdat_dirty_limit = NULL;
+	// 是否需要避免内存碎片
 	bool no_fallback;
 
 retry:
@@ -4055,6 +4058,7 @@ retry:
 	 */
 	no_fallback = alloc_flags & ALLOC_NOFRAGMENT;
 	z = ac->preferred_zoneref;
+	// 遍历当前NUMA节点以及备用节点的所有区域
 	for_next_zone_zonelist_nodemask(zone, z, ac->highest_zoneidx,
 					ac->nodemask) {
 		struct page *page;
@@ -4702,19 +4706,25 @@ gfp_to_alloc_flags(gfp_t gfp_mask)
 	alloc_flags |= (__force int)
 		(gfp_mask & (__GFP_HIGH | __GFP_KSWAPD_RECLAIM));
 
+	// 如果内存分配是原子的话，则在内存不够的时候，可以从紧急预留内存中分配
 	if (gfp_mask & __GFP_ATOMIC) {
 		/*
 		 * Not worth trying to allocate harder for __GFP_NOMEMALLOC even
 		 * if it can't schedule.
 		 */
+		// __GFP_NOMEMALLOC表示禁止从紧急预留的内存中分配，优先级比__GFP_MEMALLOC高，
+		// 因此这里是与__GFP_NOMEMALLOC做与操作
 		if (!(gfp_mask & __GFP_NOMEMALLOC))
-			alloc_flags |= ALLOC_HARDER;
+			alloc_flags |= ALLOC_HARDER; //后续根据 ALLOC_HARDER 标识会降低 WMARK_LOW 水位线
 		/*
 		 * Ignore cpuset mems for GFP_ATOMIC rather than fail, see the
 		 * comment for __cpuset_node_allowed().
 		 */
+		 // 这种情况下为了内存分配的成功，会去除掉 CPUSET 的限制，可以在所有 NUMA 节点上分配内存
 		alloc_flags &= ~ALLOC_CPUSET;
-	} else if (unlikely(rt_task(current)) && in_task())
+	} 
+	// 如果当前进程是实时任务（可能不太可能发生的情况），并且在任务的上下文中,设置header
+	else if (unlikely(rt_task(current)) && in_task())
 		alloc_flags |= ALLOC_HARDER;
 
 	alloc_flags = gfp_to_alloc_flags_cma(gfp_mask, alloc_flags);
@@ -4743,16 +4753,20 @@ static bool oom_reserves_allowed(struct task_struct *tsk)
  */
 static inline int __gfp_pfmemalloc_flags(gfp_t gfp_mask)
 {
-	if (unlikely(gfp_mask & __GFP_NOMEMALLOC))
+	// 如果不允许从紧急预留内存中分配，就不改变alloc_flag
+	if (unlikely(gfp_mask & __GFP_NOMEMALLOC)) 
 		return 0;
+	// 如果允许从紧急预留内存中分配，则后面的内存分配会忽略内存水位线的限制
 	if (gfp_mask & __GFP_MEMALLOC)
 		return ALLOC_NO_WATERMARKS;
+	// 当前进程处于软中断上下文并且进程设置了 PF_MEMALLOC 标识
 	if (in_serving_softirq() && (current->flags & PF_MEMALLOC))
 		return ALLOC_NO_WATERMARKS;
+	// 当前进程不在任何中断上下文中
 	if (!in_interrupt()) {
 		if (current->flags & PF_MEMALLOC)
 			return ALLOC_NO_WATERMARKS;
-		else if (oom_reserves_allowed(current))
+		else if (oom_reserves_allowed(current)) // 当前进程允许进行 OOM
 			return ALLOC_OOM;
 	}
 
@@ -4902,10 +4916,16 @@ static inline struct page *
 __alloc_pages_slowpath(gfp_t gfp_mask, unsigned int order,
 						struct alloc_context *ac)
 {
+	/*
+	初始化慢速内存分配路径下的相关参数
+	*/
 	bool can_direct_reclaim = gfp_mask & __GFP_DIRECT_RECLAIM;
+	//order大于3时，即分配8个页面时，认为这个分配是costly的，后续会根据这个参数 costly_order 来决定是否触发 OOM 。
 	const bool costly_order = order > PAGE_ALLOC_COSTLY_ORDER;
 	struct page *page = NULL;
 	unsigned int alloc_flags;
+	/* 当内存严重不足的时候，内核会开启直接内存回收 direct_reclaim ，
+	参数 did_some_progress 表示经过一次直接内存回收之后，内核回收了多少个内存页*/
 	unsigned long did_some_progress;
 	enum compact_priority compact_priority;
 	enum compact_result compact_result;
@@ -4935,6 +4955,7 @@ restart:
 	 * kswapd needs to be woken up, and to avoid the cost of setting up
 	 * alloc_flags precisely. So we do that now.
 	 */
+	// 所以在慢速内存分配路径下需要重新设置更加激进的内存分配策略，采用更大的代价来分配内存
 	alloc_flags = gfp_to_alloc_flags(gfp_mask);
 
 	/*
@@ -4948,7 +4969,7 @@ restart:
 	if (!ac->preferred_zoneref->zone)
 		goto nopage;
 
-	if (alloc_flags & ALLOC_KSWAPD)
+	if (alloc_flags & ALLOC_KSWAPD) // 调用kswapds异步回收
 		wake_all_kswapds(order, gfp_mask, ac);
 
 	/*
@@ -5016,7 +5037,7 @@ restart:
 
 retry:
 	/* Ensure kswapd doesn't accidentally go to sleep as long as we loop */
-	if (alloc_flags & ALLOC_KSWAPD)
+	if (alloc_flags & ALLOC_KSWAPD)  // 确保所有 kswapd 进程不要意外进入睡眠状态
 		wake_all_kswapds(order, gfp_mask, ac);
 
 	reserve_flags = __gfp_pfmemalloc_flags(gfp_mask);
@@ -5040,36 +5061,44 @@ retry:
 		goto got_pg;
 
 	/* Caller is not willing to reclaim, we can't balance anything */
+	// 判断允不允许直接回收
 	if (!can_direct_reclaim)
 		goto nopage;
 
 	/* Avoid recursion of direct reclaim */
+	// 避免直接回收的递归
 	if (current->flags & PF_MEMALLOC)
 		goto nopage;
 
 	/* Try direct reclaim and then allocating */
+	// 尝试直接内存回收
 	page = __alloc_pages_direct_reclaim(gfp_mask, order, alloc_flags, ac,
 							&did_some_progress);
 	if (page)
 		goto got_pg;
 
 	/* Try direct compaction and then allocating */
+	// 如果还是没有足够的内存可供分配的话，那么内核会再次进行直接内存整理 direct_compact
 	page = __alloc_pages_direct_compact(gfp_mask, order, alloc_flags, ac,
 					compact_priority, &compact_result);
 	if (page)
 		goto got_pg;
 
 	/* Do not loop if specifically requested */
-	if (gfp_mask & __GFP_NORETRY)
+	if (gfp_mask & __GFP_NORETRY) // 内存分配失败时，不允许重试
 		goto nopage;
 
 	/*
 	 * Do not retry costly high order allocations unless they are
 	 * __GFP_RETRY_MAYFAIL
 	 */
+	// 当此次分配超过8个页时，内核认为时constly的分配，就不会触发OOM，除非没有设置__GFP_RETRY_MAYFAIL
 	if (costly_order && !(gfp_mask & __GFP_RETRY_MAYFAIL))
 		goto nopage;
-
+	/*
+	如果内核已经重试了MAX_RECLAIM_RETRIES(16)次仍然失败，则放弃重试，执行后续OOM
+	如果内核将所有可选内存区域中的所有可回收页面全部回收之后，仍然无法满足内存分配，那么放弃重试，执行后续OOM
+	*/
 	if (should_reclaim_retry(gfp_mask, order, ac, alloc_flags,
 				 did_some_progress > 0, &no_progress_loops))
 		goto retry;
@@ -5080,6 +5109,7 @@ retry:
 	 * implementation of the compaction depends on the sufficient amount
 	 * of free memory (see __compaction_suitable)
 	 */
+	// 如果经过回收后，did_some_progress = 0,则没有必要进行内存整理的重试了
 	if (did_some_progress > 0 &&
 			should_compact_retry(ac, order, alloc_flags,
 				compact_result, &compact_priority,
@@ -5117,6 +5147,7 @@ nopage:
 	 * Deal with possible cpuset update races or zonelist updates to avoid
 	 * a unnecessary OOM kill.
 	 */
+	
 	if (check_retry_cpuset(cpuset_mems_cookie, ac) ||
 	    check_retry_zonelist(zonelist_iter_cookie))
 		goto restart;
@@ -5125,6 +5156,9 @@ nopage:
 	 * Make sure that __GFP_NOFAIL request doesn't leak out and make sure
 	 * we always retry
 	 */
+	// 流程走到这里表明内核已经尝试了包括 OOM 在内的所有回收内存的动作。
+    // 但是这些措施依然无法满足内存分配的需求，看上去内存分配到这里就应该失败了。
+    // 但是如果设置了 __GFP_NOFAIL 表示不允许内存分配失败，那么接下来就会进入 if 分支进行处理
 	if (gfp_mask & __GFP_NOFAIL) {
 		/*
 		 * All existing users of the __GFP_NOFAIL are blockable, so warn
@@ -5154,10 +5188,15 @@ nopage:
 		 * could deplete whole memory reserves which would just make
 		 * the situation worse
 		 */
+		// 尝试进行跨NUMA节点的内存分配
 		page = __alloc_pages_cpuset_fallback(gfp_mask, order, ALLOC_HARDER, ac);
 		if (page)
 			goto got_pg;
-
+ 		/* 
+		在进行内存分配重试流程之前，使用cond_resched()让 CPU 重新调度到其他进程上
+        运行一会其他进程，因为毕竟此时内存已经严重不足
+        立马重试的话只能浪费过多时间在搜索空闲内存上，导致其他进程处于饥饿状态。
+		*/
 		cond_resched();
 		goto retry;
 	}
@@ -5173,7 +5212,9 @@ static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 		struct alloc_context *ac, gfp_t *alloc_gfp,
 		unsigned int *alloc_flags)
 {
-	ac->highest_zoneidx = gfp_zone(gfp_mask);
+	// 从gfp_mask中获取内存分配最高优先级的区域zone
+	ac->highest_zoneidx = gfp_zone(gfp_mask);  
+	// 从 NUMA 节点的备用节点链表中一次性获取允许进行内存分配的所有内存区域
 	ac->zonelist = node_zonelist(preferred_nid, gfp_mask);
 	ac->nodemask = nodemask;
 	ac->migratetype = gfp_migratetype(gfp_mask);
@@ -5192,9 +5233,9 @@ static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 
 	fs_reclaim_acquire(gfp_mask);
 	fs_reclaim_release(gfp_mask);
-
+	// 如果设置了允许直接内存回收，那么内存分配进程则可能会导致休眠被重新调度 
 	might_sleep_if(gfp_mask & __GFP_DIRECT_RECLAIM);
-
+	// 提前判断本次内存分配是否能够成功，如果不能则尽早失败
 	if (should_fail_alloc_page(gfp_mask, order))
 		return false;
 
@@ -5384,19 +5425,23 @@ struct page *__alloc_pages(gfp_t gfp, unsigned int order, int preferred_nid,
 							nodemask_t *nodemask)
 {
 	struct page *page;
+	// 内存区域中的剩余内存需要在 WMARK_LOW 水位线之上才能进行内存分配，否则失败（初次尝试快速内存分配）
 	unsigned int alloc_flags = ALLOC_WMARK_LOW;
 	gfp_t alloc_gfp; /* The gfp_t that was actually used for allocation */
+	// alloc_context用于保存在分配过程中的一些不可变的参数，比如nodemask、页面迁移类型、最高可分配的内存区域，这些
+	//在分配过程中只用初始化一次（不会变的），而像zonelist、prefer_zone等在初始化之后，可能会在__alloc_pages_slowpath()中改变
 	struct alloc_context ac = { };
 
 	/*
 	 * There are several places where we assume that the order value is sane
 	 * so bail out early if the request is out of bound.
 	 */
-	if (unlikely(order >= MAX_ORDER)) {
+	// order只能从0-10,unlikely告诉编译器这个判断不经常发生，用于编译优化
+	if (unlikely(order >= MAX_ORDER)) { 
 		WARN_ON_ONCE(!(gfp & __GFP_NOWARN));
 		return NULL;
 	}
-
+	// 表示在内存分配期间进程可以休眠阻塞
 	gfp &= gfp_allowed_mask;
 	/*
 	 * Apply scoped allocation constraints. This is mainly about GFP_NOFS
@@ -5405,8 +5450,11 @@ struct page *__alloc_pages(gfp_t gfp, unsigned int order, int preferred_nid,
 	 * memalloc_no{fs,io}_{save,restore}. And PF_MEMALLOC_PIN which ensures
 	 * movable zones are not used during allocation.
 	 */
+	// 使用函数，设置内存分配时允不允许进行io操作、允不允许进行文件系统的操作、允不允许使用可移动内存
+	// 并修改gfp中对应的标志位
 	gfp = current_gfp_context(gfp);
 	alloc_gfp = gfp;
+	// 初始化 alloc_context，并为接下来的快速内存分配设置相关 gfp
 	if (!prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &ac,
 			&alloc_gfp, &alloc_flags))
 		return NULL;
@@ -5418,6 +5466,7 @@ struct page *__alloc_pages(gfp_t gfp, unsigned int order, int preferred_nid,
 	alloc_flags |= alloc_flags_nofragment(ac.preferred_zoneref->zone, gfp);
 
 	/* First allocation attempt */
+	// 内存分配快速路径：第一次尝试从底层伙伴系统分配内存，注意此时是在 WMARK_LOW 水位线之上分配内存
 	page = get_page_from_freelist(alloc_gfp, order, alloc_flags, &ac);
 	if (likely(page))
 		goto out;
@@ -8552,9 +8601,11 @@ void setup_per_zone_wmarks(void)
  */
 int __meminit init_per_zone_wmark_min(void)
 {
+	// 低位内存区域（除高端内存之外）的总和
 	unsigned long lowmem_kbytes;
+	// 待计算的min_free_kbytes
 	int new_min_free_kbytes;
-
+	// 将低位内存区域内存容量总的页数转换为 KB
 	lowmem_kbytes = nr_free_buffer_pages() * (PAGE_SIZE >> 10);
 	new_min_free_kbytes = int_sqrt(lowmem_kbytes * 16);
 

@@ -30,6 +30,16 @@ struct vm_area_struct;
  */
 
 /* Plain integer GFP bitmasks. Do not use this directly. */
+/*
+___GFP_DMA ： 0x01u = 00000001（二进制）
+___GFP_HIGHMEM ： 0x02u = 00000010（二进制）
+___GFP_DMA32 ： 0x04u = 00000100（二进制）
+___GFP_MOVABLE ： 0x08u = 00001000（二进制）
+___GFP_RECLAIMABLE ： 0x10u = 00010000（二进制）
+___GFP_HIGH ： 0x20u = 00100000（二进制）
+___GFP_IO ： 0x40u = 01000000（二进制）
+___GFP_FS ： 0x80u = 10000000（二进制
+*/
 #define ___GFP_DMA		0x01u
 #define ___GFP_HIGHMEM		0x02u
 #define ___GFP_DMA32		0x04u
@@ -476,6 +486,7 @@ static inline bool gfpflags_normal_context(const gfp_t gfp_flags)
 static inline enum zone_type gfp_zone(gfp_t flags)
 {
 	enum zone_type z;
+	
 	int bit = (__force int) (flags & GFP_ZONEMASK);
 
 	z = (GFP_ZONE_TABLE >> (bit * GFP_ZONES_SHIFT)) &

@@ -297,11 +297,22 @@ void lru_note_cost_page(struct page *page)
 
 static void __activate_page(struct page *page, struct lruvec *lruvec)
 {
-	if (!PageActive(page) && !PageUnevictable(page)) {
+	// 页不活跃且不可驱逐
+	if (!PageActive(page) && !PageUnevictable(page)) 
+	{
+		// 获取页面的页数，可能是大页面
 		int nr_pages = thp_nr_pages(page);
-
+		/*
+		将page的lru结构体中prev和next置空，并且修改其后一个节点的prev和前一个节点的next
+		此时page就不在lru中
+		*/
 		del_page_from_lru_list(page, lruvec);
+		// page页置为active
 		SetPageActive(page);
+		/*
+		调用add_page_to_lru再将其加入lru中
+		在函数中会判断页属于文件页还是匿名页，然后加入对应的active链表
+		*/ 
 		add_page_to_lru_list(page, lruvec);
 		trace_mm_lru_activate(page);
 
@@ -350,10 +361,14 @@ static void activate_page(struct page *page)
 	struct lruvec *lruvec;
 
 	page = compound_head(page);
+	// 测试并清除页面的LRU标志位
 	if (TestClearPageLRU(page)) {
+		// 获取这个page页所在numa节点的lruvec，并加锁
 		lruvec = lock_page_lruvec_irq(page);
+		// 从inactive中删除，并加入active中
 		__activate_page(page, lruvec);
 		unlock_page_lruvec_irq(lruvec);
+		// 置位lru标志位
 		SetPageLRU(page);
 	}
 }
@@ -377,6 +392,7 @@ static void __lru_cache_activate_page(struct page *page)
 	 * a page is marked PageActive just after it is added to the inactive
 	 * list causing accounting errors and BUG_ON checks to trigger.
 	 */
+	// 遍历lru_add，找到对应的page页，置位active
 	for (i = pagevec_count(pvec) - 1; i >= 0; i--) {
 		struct page *pagevec_page = pvec->pages[i];
 
@@ -403,24 +419,33 @@ void mark_page_accessed(struct page *page)
 {
 	page = compound_head(page);
 
-	if (!PageReferenced(page)) {
+	// 页面如果是未引用的，只用修改其引用位就可以
+	if (!PageReferenced(page)) 
+	{
 		SetPageReferenced(page);
-	} else if (PageUnevictable(page)) {
+	} 
+	else if (PageUnevictable(page)) 
+	{
 		/*
 		 * Unevictable pages are on the "LRU_UNEVICTABLE" list. But,
 		 * this list is never rotated or maintained, so marking an
 		 * evictable page accessed has no effect.
 		 */
-	} else if (!PageActive(page)) {
+	} else if (!PageActive(page)) 
+	{
 		/*
 		 * If the page is on the LRU, queue it for activation via
 		 * lru_pvecs.activate_page. Otherwise, assume the page is on a
 		 * pagevec, mark it active and it'll be moved to the active
 		 * LRU on the next drain.
 		 */
+		// 如果页面位于LRU上，通过active_page
 		if (PageLRU(page))
 			activate_page(page);
 		else
+		/*
+		可能出现一种情况是，这个页还在lru缓存pagevec中，因数组没满，还没有加入到lru中
+		*/
 			__lru_cache_activate_page(page);
 		ClearPageReferenced(page);
 		workingset_activation(page);
@@ -442,12 +467,18 @@ EXPORT_SYMBOL(mark_page_accessed);
 void lru_cache_add(struct page *page)
 {
 	struct pagevec *pvec;
-
+	// 检查页是否是活跃且不可驱逐
 	VM_BUG_ON_PAGE(PageActive(page) && PageUnevictable(page), page);
-	VM_BUG_ON_PAGE(PageLRU(page), page);
+	// 检查页是否在LRU列表中，在的话，出错
+	VM_BUG_ON_PAGE(PageLRU(page), page); 
 
+	// 获取对页的引用，增加了页的引用计数，确保在函数退出之前，页面不会意外释放
 	get_page(page);
 	local_lock(&lru_pvecs.lock);
+	/*
+	每个CPU一个lru_pvecs,this_cpu_ptr() 是一个宏，用于获取当前 CPU 上的指针。
+	它接受一个指针，然后返回当前 CPU 上指向相同位置的指针。
+	*/ 
 	pvec = this_cpu_ptr(&lru_pvecs.lru_add);
 	if (pagevec_add_and_need_flush(pvec, page))
 		__pagevec_lru_add(pvec);
@@ -989,7 +1020,7 @@ static void __pagevec_lru_add_fn(struct page *page, struct lruvec *lruvec)
 {
 	int was_unevictable = TestClearPageUnevictable(page);
 	int nr_pages = thp_nr_pages(page);
-
+	// 检查这个页是否在LRU中
 	VM_BUG_ON_PAGE(PageLRU(page), page);
 
 	/*

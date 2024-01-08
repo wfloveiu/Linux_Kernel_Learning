@@ -68,6 +68,8 @@ struct mem_cgroup;
 #endif
 
 struct page {
+	// 存储page的定位信息以及相关标志位
+	// 如果是复合页的首页，flags中对应位会被设置成PF_head
 	unsigned long flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
 	/*
@@ -83,9 +85,12 @@ struct page {
 			 * lruvec->lru_lock.  Sometimes used as a generic list
 			 * by the page owner.
 			 */
+			// 指向物理页被放在了哪个先进先出双向链表上，lru是链表头指针
 			struct list_head lru;
 			/* See page-flags.h for PAGE_MAPPING_FLAGS */
+			// mapping指向它所属的页高速缓存结构体
 			struct address_space *mapping;
+			// 在页高速缓存地址空间中以页大小为单位的偏移量
 			pgoff_t index;		/* Our offset within mapping. */
 			/**
 			 * @private: Mapping-private opaque data.
@@ -145,11 +150,15 @@ struct page {
 			};
 		};
 		struct {	/* Tail pages of compound page */
+			// 尾页会使用compound_head指向首页
 			unsigned long compound_head;	/* Bit zero is set */
 
 			/* First tail page only */
+			// 析构函数
 			unsigned char compound_dtor;
+			// 复合页有多少个page
 			unsigned char compound_order;
+			// 被多少个进程使用,反向映射个数
 			atomic_t compound_mapcount;
 			unsigned int compound_nr; /* 1 << compound_order */
 		};
@@ -198,6 +207,7 @@ struct page {
 		 * If the page can be mapped to userspace, encodes the number
 		 * of times this page is referenced by a page table.
 		 */
+		// 表示该 page 映射了多少个进程的虚拟内存空间，一个 page 可以被多个进程映射
 		atomic_t _mapcount;
 
 		/*

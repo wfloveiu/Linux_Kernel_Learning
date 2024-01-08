@@ -170,12 +170,17 @@ static inline gfp_t current_gfp_context(gfp_t flags)
 		 * NOIO implies both NOIO and NOFS and it is a weaker context
 		 * so always make sure it makes precedence
 		 */
+		/*
+		如果进程设置了 PF_MEMALLOC_NOIO 标志，意味着当前上下文不允许进行 I/O 操作的内存分配。
+		因此，将传入的 flags 中的 __GFP_IO 和 __GFP_FS 标志位清除，表示不允许进行 I/O 相关的内存分配。
+		*/
 		if (pflags & PF_MEMALLOC_NOIO)
 			flags &= ~(__GFP_IO | __GFP_FS);
+		// 如果进程设置了 PF_MEMALLOC_NOFS 标志，意味着当前上下文不允许进行文件系统相关的内存分配
 		else if (pflags & PF_MEMALLOC_NOFS)
 			flags &= ~__GFP_FS;
 
-		if (pflags & PF_MEMALLOC_PIN)
+		if (pflags & PF_MEMALLOC_PIN) // 避免使用可移动内存
 			flags &= ~__GFP_MOVABLE;
 	}
 	return flags;

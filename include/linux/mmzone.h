@@ -52,7 +52,7 @@ enum migratetype {
 	MIGRATE_UNMOVABLE,
 	MIGRATE_MOVABLE,
 	MIGRATE_RECLAIMABLE,
-	MIGRATE_PCPTYPES,	/* the number of types on the pcp lists */
+	MIGRATE_PCPTYPES,	// 属于pcp高速缓存中的类型
 	MIGRATE_HIGHATOMIC = MIGRATE_PCPTYPES,
 #ifdef CONFIG_CMA
 	/*
@@ -68,9 +68,12 @@ enum migratetype {
 	 * MAX_ORDER_NR_PAGES should biggest page be bigger than
 	 * a single pageblock.
 	 */
+	// 当驱动不使用内存时，将这部分内存分配给用户
+	// 当需要时则通过回收或者迁移的方式将内存腾出来
 	MIGRATE_CMA,
 #endif
 #ifdef CONFIG_MEMORY_ISOLATION
+	// 用于跨越NUMA节点移动内存页
 	MIGRATE_ISOLATE,	/* can't allocate from here */
 #endif
 	MIGRATE_TYPES
@@ -282,18 +285,18 @@ static __always_inline bool vmstat_item_in_bytes(int idx)
 #define LRU_ACTIVE 1
 #define LRU_FILE 2
 #endif
-
+// 双向链表
 enum lru_list {
-	LRU_INACTIVE_ANON = LRU_BASE,
-	LRU_INACTIVE_FILE = LRU_BASE + LRU_FILE,
-	LRU_ACTIVE_ANON = LRU_BASE + LRU_ACTIVE,
-	LRU_ACTIVE_FILE = LRU_BASE + LRU_FILE + LRU_ACTIVE,
+	LRU_INACTIVE_ANON = LRU_BASE, // 非活动匿名页LRU链表
+	LRU_INACTIVE_FILE = LRU_BASE + LRU_FILE, // 非活动文件页LRU链表
+	LRU_ACTIVE_ANON = LRU_BASE + LRU_ACTIVE, // 活动匿名页LRU链表
+	LRU_ACTIVE_FILE = LRU_BASE + LRU_FILE + LRU_ACTIVE, // 活动文件页
 #ifdef CONFIG_NUMA_PREDICT
 	//LRU_PROMOTE_FILE = LRU_BASE + LRU_FILE + LRU_PROMOTE,
 	LRU_PREDICT_ANON = LRU_BASE + LRU_PREDICT,
 	LRU_PREDICT_FILE = LRU_BASE + LRU_FILE + LRU_PREDICT,
 #endif
-	LRU_UNEVICTABLE,
+	LRU_UNEVICTABLE, // 禁止换出链表
 	NR_LRU_LISTS
 };
 
@@ -360,6 +363,7 @@ struct lruvec {
 /* LRU Isolation modes. */
 typedef unsigned __bitwise isolate_mode_t;
 
+// 3类watermark
 enum zone_watermarks {
 	WMARK_MIN,
 	WMARK_LOW,
@@ -394,13 +398,16 @@ enum zone_watermarks {
 struct per_cpu_pages {
 	int count;		/* number of pages in the list */
 	int high;		/* high watermark, emptying needed */
+	// 当需要增加或者减少高速缓存页框时，操作的页框个数
 	int batch;		/* chunk size for buddy add/remove */
+	// 空闲期间的批量释放因子
 	short free_factor;	/* batch scaling factor during free */
 #ifdef CONFIG_NUMA
 	short expire;		/* When 0, remote pagesets are drained */
 #endif
 
 	/* Lists of pages, one per migrate type stored on the pcp-lists */
+	// 每个迁移类型存储在一个list[i]上
 	struct list_head lists[NR_PCP_LISTS];
 };
 
@@ -438,7 +445,7 @@ enum zone_type {
 	 * different DMA addressing limitations.
 	 */
 #ifdef CONFIG_ZONE_DMA
-	ZONE_DMA,
+	ZONE_DMA, // 那些无法对全部物理内存进行寻址的硬件设备，进行 DMA 时的内存分配。
 #endif
 #ifdef CONFIG_ZONE_DMA32
 	ZONE_DMA32,
@@ -525,9 +532,10 @@ struct zone {
 	/* Read-mostly fields */
 
 	/* zone watermarks, access with *_wmark_pages(zone) macros */
+	// 这在页面分配器和kswapd页面回收中会用到。当该zone可用内存小于WMARK_LOW时，会触发oom回收内存。
 	unsigned long _watermark[NR_WMARK];
 	unsigned long watermark_boost;
-
+	// 是该内存区域内预留内存的大小，范围为 128 到 65536 KB 之间。
 	unsigned long nr_reserved_highatomic;
 
 	/*
@@ -539,12 +547,16 @@ struct zone {
 	 * recalculated at runtime if the sysctl_lowmem_reserve_ratio sysctl
 	 * changes.
 	 */
+
+	// 在处理内存不足的情况下，每个管理区必须保留的页框数,防止高位挤压
 	long lowmem_reserve[MAX_NR_ZONES];
 
 #ifdef CONFIG_NUMA
 	int node;
 #endif
+	// 指向numa的node节点
 	struct pglist_data	*zone_pgdat;
+	// 实现每CPU页框的高速缓存。里面包含每个CPU的单页框的链表
 	struct per_cpu_pages	__percpu *per_cpu_pageset;
 	struct per_cpu_zonestat	__percpu *per_cpu_zonestats;
 	/*
@@ -563,6 +575,7 @@ struct zone {
 #endif /* CONFIG_SPARSEMEM */
 
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
+	// 该内存区域内所管理的第一个物理页面的PFN
 	unsigned long		zone_start_pfn;
 
 	/*
@@ -607,8 +620,11 @@ struct zone {
 	 * mem_hotplug_begin/end(). Any reader who can't tolerant drift of
 	 * present_pages should get_online_mems() to get a stable value.
 	 */
+	// 该内存区域内被伙伴系统所管理的物理页数量
 	atomic_long_t		managed_pages;
+	// 内存区域所有的物理页总数（包含内存空洞）
 	unsigned long		spanned_pages;
+	// 所有实际可以用的物理页面总数（不包含内存空洞）
 	unsigned long		present_pages;
 #if defined(CONFIG_MEMORY_HOTPLUG)
 	unsigned long		present_early_pages;
@@ -636,9 +652,12 @@ struct zone {
 	int initialized;
 
 	/* Write-intensive fields used from the page allocator */
+	// 字节填充
 	ZONE_PADDING(_pad1_)
 
 	/* free areas of different sizes */
+
+	// 伙伴系统的核心数据结构！！
 	struct free_area	free_area[MAX_ORDER];
 
 	/* zone flags, see below */
@@ -687,6 +706,8 @@ struct zone {
 
 	ZONE_PADDING(_pad3_)
 	/* Zone statistics */
+
+	// 维护了该内存区域物理内存的使用统计信息
 	atomic_long_t		vm_stat[NR_VM_ZONE_STAT_ITEMS];
 	atomic_long_t		vm_numa_event[NR_VM_NUMA_EVENT_ITEMS];
 } ____cacheline_internodealigned_in_smp;
@@ -767,6 +788,7 @@ static inline bool zone_intersects(struct zone *zone,
 #define DEF_PRIORITY 12
 
 /* Maximum number of zones on a zonelist */
+// 最大的node节点个数*每个节点的最大zone个数
 #define MAX_ZONES_PER_ZONELIST (MAX_NUMNODES * MAX_NR_ZONES)
 
 enum {
@@ -837,6 +859,8 @@ typedef struct pglist_data {
 	 * zones may be populated, but it is the full list. It is referenced by
 	 * this node's node_zonelists as well as other node's node_zonelists.
 	 */
+
+	 // NUMA 节点中的物理内存区域,物理内存区域在zone——type中定义,numa节点包含的内存区域个数不一定一样
 	struct zone node_zones[MAX_NR_ZONES];
 
 	/*
@@ -844,8 +868,11 @@ typedef struct pglist_data {
 	 * Generally the first zones will be references to this node's
 	 * node_zones.
 	 */
+	// 它包含了备用 NUMA 节点和这些备用节点中的物理内存区域。
+	// 备用节点是按照访问距离的远近，依次排列在 node_zonelists 数组中，数组第一个备用节点是访问距离最近的，
 	struct zonelist node_zonelists[MAX_ZONELISTS];
 
+	//包含的物理内存区域个数
 	int nr_zones; /* number of populated zones in this node */
 #ifdef CONFIG_FLATMEM	/* means !SPARSEMEM */
 	struct page *node_mem_map;
@@ -873,8 +900,11 @@ typedef struct pglist_data {
 	unsigned long node_spanned_pages; /* total size of physical page
 					     range, including holes */
 	int node_id;
+	//  kswapd 进程周期性回收页面时使用到的等待队列。
 	wait_queue_head_t kswapd_wait;
 	wait_queue_head_t pfmemalloc_wait;
+
+	// 页面回收进程
 	struct task_struct *kswapd;	/* Protected by
 					   mem_hotplug_begin/end() */
 #ifdef CONFIG_NUMA_PREDICT
@@ -900,6 +930,7 @@ typedef struct pglist_data {
 	int kcompactd_max_order;
 	enum zone_type kcompactd_highest_zoneidx;
 	wait_queue_head_t kcompactd_wait;
+	// 内存规整进程
 	struct task_struct *kcompactd;
 	bool proactive_compact_trigger;
 #endif
