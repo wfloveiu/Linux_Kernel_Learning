@@ -153,6 +153,7 @@ enum numa_stat_item {
 #define NR_VM_NUMA_EVENT_ITEMS 0
 #endif
 
+
 enum zone_stat_item {
 	/* First 128 byte cacheline (assuming 64 bit words) */
 	NR_FREE_PAGES,
@@ -408,6 +409,23 @@ struct per_cpu_pages {
 
 	/* Lists of pages, one per migrate type stored on the pcp-lists */
 	// 每个迁移类型存储在一个list[i]上
+	/*
+	通过看NR_PCP_LISTS的计算方式可以得出，在这个版本的的Linux内核中，pcp高速缓存列表中页面大小不只是1，
+	而是将页面大小种类增加，有2^0、2^1、2^2、2^3,通过PAGE_ALLOC_COSTLY_ORDER设置！！
+	具体的下标对应的类型如下（通过 __rmqueue_pcplist函数判断出来的）
+	0: order0 && MIGRATE_UNMOVABLE
+	1: order0 && MIGRATE_MOVABLE
+	2: order0 && MIGRATE_RECLAIMABLE
+	3: order1 && MIGRATE_UNMOVABLE
+	4: order1 && MIGRATE_MOVABLE
+	5: order1 && MIGRATE_RECLAIMABLE
+	6: order2 && MIGRATE_UNMOVABLE
+	7: order2 && MIGRATE_MOVABLE
+	8: order2 && MIGRATE_RECLAIMABLE
+	9: order3 && MIGRATE_UNMOVABLE
+	10: order3 && MIGRATE_MOVABLE
+	11: order3 && MIGRATE_RECLAIMABLE
+	*/ 
 	struct list_head lists[NR_PCP_LISTS];
 };
 

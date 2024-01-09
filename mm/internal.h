@@ -180,6 +180,7 @@ struct alloc_context {
 static inline unsigned long
 __find_buddy_pfn(unsigned long page_pfn, unsigned int order)
 {
+	// 找到它的伙伴的pfn，计算方式很巧妙，看不懂
 	return page_pfn ^ (1 << order);
 }
 
